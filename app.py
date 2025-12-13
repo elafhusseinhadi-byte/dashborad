@@ -32,7 +32,7 @@ h1 { margin-bottom: 0.5rem; }
 # =========================================================
 # TITLE
 # =========================================================
-st.title("UAV Real-Time Monitoring & Collision Avoidance Dashboard")
+st.markdown("UAV Real-Time Monitoring & Collision Avoidance Dashboard")
 
 # =========================================================
 # FETCH DATA
@@ -45,9 +45,9 @@ def fetch_data():
 
 try:
     data_before, data_after = fetch_data()
-    st.success("✔ Data fetched from server")
+    st.success(" Data fetched from server")
 except Exception as e:
-    st.error(f"❌ Server connection failed: {e}")
+    st.error(f" Server connection failed: {e}")
     st.stop()
 
 # =========================================================
