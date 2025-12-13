@@ -29,8 +29,7 @@ COLORS = {
 # =========================================================
 # TITLE
 # =========================================================
-st.title("🛩️ UAV Real-Time Monitoring & Collision Avoidance Dashboard")
-st.caption("Cloud-based visualization using FastAPI backend + Streamlit frontend")
+st.title(" UAV Real-Time Monitoring & Collision Avoidance Dashboard")
 
 # =========================================================
 # FETCH DATA
@@ -45,7 +44,7 @@ try:
     data_before, data_after = fetch_data()
     st.success("✔ Data fetched from server")
 except Exception as e:
-    st.error(f"❌ Server connection failed: {e}")
+    st.error(f" Server connection failed: {e}")
     st.stop()
 
 # =========================================================
@@ -167,7 +166,7 @@ st.plotly_chart(fig, use_container_width=True)
 # =========================================================
 # TABLES
 # =========================================================
-st.subheader("📋 RAW DATA TABLES")
+st.subheader(" RAW DATA TABLES")
 
 c1, c2 = st.columns(2)
 
