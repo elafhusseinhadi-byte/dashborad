@@ -15,7 +15,7 @@ REFRESH_SEC = 2
 st.set_page_config(page_title="UAV Dashboard", layout="wide")
 
 # =========================================================
-# STYLE (NO CUT, COMPACT)
+# STYLE (SAFE, NO CUT)
 # =========================================================
 st.markdown("""
 <style>
@@ -62,8 +62,8 @@ def to_df(data):
     for u in data["uavs"]:
         rows.append({
             "UAV_ID": u["uav_id"],
-            "X": u["x"],
-            "Y": u["y"],
+            "X": u["x"],              # longitude
+            "Y": u["y"],              # latitude
             "Status": u["status"],
             "dmin": u["min_distance_km"],
             "PredX": u["predicted"]["x"] if u.get("predicted") else np.nan,
@@ -73,6 +73,17 @@ def to_df(data):
 
 dfB = to_df(data_before)
 dfA = to_df(data_after)
+
+# =========================================================
+# COLLISION ALERT
+# =========================================================
+collision_df = dfA[dfA["Status"] == "collision"]
+collision_count = len(collision_df)
+
+if collision_count > 0:
+    st.error(f"🚨 COLLISION ALERT: {collision_count} UAV(s) detected!")
+else:
+    st.success("✅ No collisions detected")
 
 # =========================================================
 # ===== TOP ROW : 4 MAIN PLOTS =====
@@ -171,7 +182,7 @@ pred_move = np.sqrt(
     (dfB["PredY"] - dfB["Y"])**2
 )
 
-# 1) Predicted Displacement (LINE + MARKERS)
+# Predicted displacement (Line + Markers)
 fig1 = go.Figure()
 fig1.add_trace(go.Scatter(
     y=pred_move,
@@ -183,13 +194,10 @@ fig1.update_layout(
     title="Predicted Displacement",
     xaxis_title="UAV Index",
     yaxis_title="Predicted Displacement (km)",
-    height=260,
-    margin=dict(l=40, r=20, t=40, b=35),
-    xaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.15)"),
-    yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.15)")
+    height=260
 )
 
-# 2) Delta dmin
+# Delta dmin
 fig2 = go.Figure()
 fig2.add_trace(go.Bar(y=delta_dmin))
 fig2.update_layout(
@@ -199,14 +207,10 @@ fig2.update_layout(
     height=260
 )
 
-# 3) dmin before vs after
+# dmin before vs after
 fig3 = go.Figure()
-fig3.add_trace(go.Scatter(
-    y=dmin_before, mode="lines+markers", name="Before"
-))
-fig3.add_trace(go.Scatter(
-    y=dmin_after, mode="lines+markers", name="After"
-))
+fig3.add_trace(go.Scatter(y=dmin_before, mode="lines+markers", name="Before"))
+fig3.add_trace(go.Scatter(y=dmin_after,  mode="lines+markers", name="After"))
 fig3.update_layout(
     title="dmin Before vs After",
     xaxis_title="UAV Index",
@@ -220,7 +224,36 @@ with c2: st.plotly_chart(fig2, use_container_width=True)
 with c3: st.plotly_chart(fig3, use_container_width=True)
 
 # =========================================================
-# ===== TABLES =====
+# UAV MAP
+# =========================================================
+st.subheader("🗺️ UAV Geographical Map")
+
+map_fig = go.Figure()
+
+for s, col in colors.items():
+    d = dfA[dfA["Status"] == s]
+    map_fig.add_trace(go.Scattermapbox(
+        lat=d["Y"],
+        lon=d["X"],
+        mode="markers",
+        marker=dict(size=11, color=col),
+        name=s
+    ))
+
+map_fig.update_layout(
+    mapbox=dict(
+        style="open-street-map",
+        center=dict(lat=dfA["Y"].mean(), lon=dfA["X"].mean()),
+        zoom=11
+    ),
+    height=420,
+    margin=dict(l=0, r=0, t=30, b=0)
+)
+
+st.plotly_chart(map_fig, use_container_width=True)
+
+# =========================================================
+# TABLES
 # =========================================================
 st.subheader("RAW UAV DATA")
 
