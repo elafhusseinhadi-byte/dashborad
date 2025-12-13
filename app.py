@@ -20,7 +20,7 @@ st.set_page_config(page_title="UAV Dashboard", layout="wide")
 st.markdown("""
 <style>
 .block-container {
-    padding-top: 1rem;
+    padding-top: 1.2rem;
     padding-bottom: 0.5rem;
 }
 h2 {
@@ -154,7 +154,7 @@ fig_top.update_layout(
     height=360,
     barmode="group",
     margin=dict(l=10, r=10, t=40, b=10),
-    legend=dict(orientation="h", y=-0.25)
+    legend=dict(orientation="h", y=-0.28)
 )
 
 st.plotly_chart(fig_top, use_container_width=True)
@@ -171,21 +171,25 @@ pred_move = np.sqrt(
     (dfB["PredY"] - dfB["Y"])**2
 )
 
-# Predicted displacement
+# 1) Predicted Displacement (LINE + MARKERS)
 fig1 = go.Figure()
 fig1.add_trace(go.Scatter(
     y=pred_move,
-    mode="markers",
-    marker=dict(size=6)
+    mode="lines+markers",
+    line=dict(width=2, color="blue"),
+    marker=dict(size=7, symbol="circle-open")
 ))
 fig1.update_layout(
     title="Predicted Displacement",
     xaxis_title="UAV Index",
     yaxis_title="Predicted Displacement (km)",
-    height=260
+    height=260,
+    margin=dict(l=40, r=20, t=40, b=35),
+    xaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.15)"),
+    yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.15)")
 )
 
-# Delta dmin
+# 2) Delta dmin
 fig2 = go.Figure()
 fig2.add_trace(go.Bar(y=delta_dmin))
 fig2.update_layout(
@@ -195,10 +199,14 @@ fig2.update_layout(
     height=260
 )
 
-# dmin before vs after
+# 3) dmin before vs after
 fig3 = go.Figure()
-fig3.add_trace(go.Scatter(y=dmin_before, mode="lines+markers", name="Before"))
-fig3.add_trace(go.Scatter(y=dmin_after,  mode="lines+markers", name="After"))
+fig3.add_trace(go.Scatter(
+    y=dmin_before, mode="lines+markers", name="Before"
+))
+fig3.add_trace(go.Scatter(
+    y=dmin_after, mode="lines+markers", name="After"
+))
 fig3.update_layout(
     title="dmin Before vs After",
     xaxis_title="UAV Index",
