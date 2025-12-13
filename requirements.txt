@@ -1,6 +1,5 @@
-fastapi
-uvicorn
-sqlalchemy
+streamlit
 requests
-matplotlib
 numpy
+pandas
+plotly
