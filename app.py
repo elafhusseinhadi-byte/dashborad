@@ -1,134 +1,186 @@
+import time
+import requests
+import numpy as np
+import pandas as pd
+import streamlit as st
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-# =====================================================
-# 🚀 UAV Simulation Server (Online Ready)
-# =====================================================
-from fastapi import FastAPI
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, Float, String, MetaData, Table
-from sqlalchemy.orm import sessionmaker
-import time, random, asyncio
+# =========================================================
+# CONFIG
+# =========================================================
+SERVER = "https://drns-1.onrender.com"
 
-# -------------------------------
-# 🛰️ نموذج بيانات UAV
-# -------------------------------
-class UAV(BaseModel):
-    uav_id: int
-    x: float
-    y: float
-    altitude: float
-    speed: float
-    system_case: str  # normal, avoidance
-
-# -------------------------------
-# ⚙️ إعداد قاعدة بيانات SQLite
-# -------------------------------
-engine = create_engine("sqlite:///uav_db_full.sqlite", connect_args={"check_same_thread": False})
-metadata = MetaData()
-
-uav_table = Table(
-    "uavs", metadata,
-    Column("uav_id", Integer, primary_key=True),
-    Column("city_name", String, index=True),
-    Column("x", Float),
-    Column("y", Float),
-    Column("altitude", Float),
-    Column("speed", Float),
-    Column("system_case", String)
+st.set_page_config(
+    page_title="UAV Real-Time Dashboard",
+    layout="wide"
 )
-metadata.create_all(engine)
-SessionLocal = sessionmaker(bind=engine)
 
-# -------------------------------
-# 🖥️ إعداد FastAPI server
-# -------------------------------
-app = FastAPI(title="UAV Simulation Server (Online)")
+# IEEE Colors
+COLORS = {
+    "safe": "rgb(0,77,255)",
+    "outer_near": "rgb(255,204,0)",
+    "inner_near": "rgb(255,102,0)",
+    "collision": "rgb(255,0,0)",
+    "pred": "rgb(255,0,255)",
+    "after": "rgb(0,180,0)"
+}
 
-@app.put("/city/{city}/uav")
-async def put_uav(city: str, data: UAV):
-    session = SessionLocal()
-    start = time.time()
-    try:
-        existing = session.query(uav_table).filter_by(city_name=city, uav_id=data.uav_id).first()
-        if existing:
-            stmt = uav_table.update().where(
-                (uav_table.c.city_name==city) & (uav_table.c.uav_id==data.uav_id)
-            ).values(
-                x=data.x, y=data.y,
-                altitude=data.altitude,
-                speed=data.speed,
-                system_case=data.system_case
-            )
-            session.execute(stmt)
-        else:
-            stmt = uav_table.insert().values(
-                city_name=city,
-                uav_id=data.uav_id,
-                x=data.x,
-                y=data.y,
-                altitude=data.altitude,
-                speed=data.speed,
-                system_case=data.system_case
-            )
-            session.execute(stmt)
-        session.commit()
-        elapsed_ms = (time.time()-start)*1000
-        return {"status":"ok", "put_time_ms": round(elapsed_ms,3)}
-    finally:
-        session.close()
+# =========================================================
+# TITLE
+# =========================================================
+st.title("🛩️ UAV Real-Time Monitoring & Collision Avoidance Dashboard")
+st.caption("Cloud-based visualization using FastAPI backend + Streamlit frontend")
 
-@app.get("/city/{city}/uavs")
-async def get_uavs(city: str, system_case: str=None):
-    session = SessionLocal()
-    start = time.time()
-    try:
-        query = session.query(uav_table).filter_by(city_name=city)
-        if system_case:
-            query = query.filter_by(system_case=system_case)
-        uavs = query.all()
-        elapsed_ms = (time.time()-start)*1000
-        approx_db_kb = round(len(uavs)*0.5,2)
-        return {"uavs":[{"uav_id": u.uav_id, "x": u.x, "y": u.y, "altitude": u.altitude,
-                         "speed": u.speed, "system_case": u.system_case} for u in uavs],
-                "get_time_ms": round(elapsed_ms,3),
-                "db_size_kb": approx_db_kb}
-    finally:
-        session.close()
+# =========================================================
+# FETCH DATA
+# =========================================================
+@st.cache_data(ttl=2)
+def fetch_data():
+    before = requests.get(SERVER + "/uavs?process=false", timeout=20).json()
+    after  = requests.get(SERVER + "/uavs?process=true",  timeout=20).json()
+    return before, after
 
-@app.post("/city/{city}/process")
-async def process_uavs(city: str, system_case: str=None):
-    session = SessionLocal()
-    start = time.time()
-    try:
-        query = session.query(uav_table).filter_by(city_name=city)
-        if system_case:
-            query = query.filter_by(system_case=system_case)
-        uavs = query.all()
-        n = len(uavs)
-        collision_pairs = []
+try:
+    data_before, data_after = fetch_data()
+    st.success("✔ Data fetched from server")
+except Exception as e:
+    st.error(f"❌ Server connection failed: {e}")
+    st.stop()
 
-        # كشف التصادم (distance < 5)
-        for i in range(n):
-            for j in range(i+1, n):
-                dx = uavs[i].x - uavs[j].x
-                dy = uavs[i].y - uavs[j].y
-                if (dx**2 + dy**2)**0.5 < 5:
-                    collision_pairs.append([uavs[i].uav_id,uavs[j].uav_id])
+# =========================================================
+# TO DATAFRAME
+# =========================================================
+def to_df(data):
+    rows = []
+    for u in data["uavs"]:
+        rows.append({
+            "ID": u["uav_id"],
+            "X": u["x"],
+            "Y": u["y"],
+            "Status": u["status"],
+            "dmin": u["min_distance_km"],
+            "PredX": u["predicted"]["x"] if "predicted" in u and u["predicted"] else np.nan,
+            "PredY": u["predicted"]["y"] if "predicted" in u and u["predicted"] else np.nan
+        })
+    return pd.DataFrame(rows)
 
-        # محاكاة زمن المعالجة
-        await asyncio.sleep(0.001*n)
-        elapsed_ms = (time.time()-start)*1000
-        avg_per_uav = round(elapsed_ms/n,3) if n>0 else 0
-        return {"processed_uavs": n,
-                "post_time_ms": round(elapsed_ms,3),
-                "avg_post_per_uav_ms": avg_per_uav,
-                "collisions_detected": len(collision_pairs),
-                "collision_pairs": collision_pairs}
-    finally:
-        session.close()
+dfB = to_df(data_before)
+dfA = to_df(data_after)
 
-# -------------------------------
-# 🌍 تشغيل السيرفر (على Render)
-# -------------------------------
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+# =========================================================
+# 4-PANEL PLOT
+# =========================================================
+fig = make_subplots(
+    rows=2, cols=2,
+    subplot_titles=[
+        "1) BEFORE – Raw UAV Positions",
+        "2) Prediction",
+        "3) AFTER – Server Avoidance",
+        "4) Status Distribution"
+    ]
+)
+
+# BEFORE
+for s in ["safe", "outer_near", "inner_near", "collision"]:
+    d = dfB[dfB["Status"] == s]
+    fig.add_trace(
+        go.Scatter(
+            x=d["X"], y=d["Y"],
+            mode="markers",
+            marker=dict(
+                symbol="circle-open",
+                size=10,
+                color=COLORS[s],
+                line=dict(width=2)
+            ),
+            name=f"BEFORE {s}"
+        ),
+        row=1, col=1
+    )
+
+# PREDICTION
+valid = dfB["PredX"].notna()
+fig.add_trace(
+    go.Scatter(
+        x=dfB[valid]["X"],
+        y=dfB[valid]["Y"],
+        mode="markers",
+        marker=dict(symbol="circle-open", size=9, color="black"),
+        name="Before"
+    ),
+    row=1, col=2
+)
+
+fig.add_trace(
+    go.Scatter(
+        x=dfB[valid]["PredX"],
+        y=dfB[valid]["PredY"],
+        mode="markers",
+        marker=dict(symbol="circle-open", size=10, color=COLORS["pred"]),
+        name="Predicted"
+    ),
+    row=1, col=2
+)
+
+# AFTER
+for s in ["safe", "outer_near", "inner_near", "collision"]:
+    d = dfA[dfA["Status"] == s]
+    fig.add_trace(
+        go.Scatter(
+            x=d["X"], y=d["Y"],
+            mode="markers",
+            marker=dict(
+                symbol="circle-open",
+                size=10,
+                color=COLORS[s],
+                line=dict(width=2)
+            ),
+            name=f"AFTER {s}"
+        ),
+        row=2, col=1
+    )
+
+# HISTOGRAM
+labels = ["safe", "outer_near", "inner_near", "collision"]
+before_counts = [sum(dfB["Status"] == s) for s in labels]
+after_counts  = [sum(dfA["Status"] == s) for s in labels]
+
+fig.add_trace(
+    go.Bar(x=labels, y=before_counts, name="Before"),
+    row=2, col=2
+)
+fig.add_trace(
+    go.Bar(x=labels, y=after_counts, name="After"),
+    row=2, col=2
+)
+
+fig.update_layout(
+    height=800,
+    showlegend=True,
+    barmode="group",
+    margin=dict(l=20, r=20, t=60, b=20)
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# =========================================================
+# TABLES
+# =========================================================
+st.subheader("📋 RAW DATA TABLES")
+
+c1, c2 = st.columns(2)
+
+with c1:
+    st.markdown("**BEFORE**")
+    st.dataframe(dfB, use_container_width=True)
+
+with c2:
+    st.markdown("**AFTER**")
+    st.dataframe(dfA, use_container_width=True)
+
+# =========================================================
+# AUTO REFRESH
+# =========================================================
+time.sleep(2)
+st.rerun()
