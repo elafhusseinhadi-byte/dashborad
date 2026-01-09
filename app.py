@@ -163,14 +163,18 @@ st.plotly_chart(fig_top, use_container_width=True)
 # =========================================================
 # MAP (IMPROVED)
 # =========================================================
-st.subheader("🗺️ UAV Geographical Map (After Avoidance)")
+# =========================================================
+# UAV MAP (CLEAN & SIMPLE)
+# =========================================================
+st.subheader("🗺️ UAV Geographical Map")
 
 map_fig = go.Figure()
+
 size_map = {
-    "safe": 10,
-    "outer_near": 12,
-    "inner_near": 14,
-    "collision": 16
+    "safe": 9,
+    "outer_near": 11,
+    "inner_near": 13,
+    "collision": 15
 }
 
 for s, col in colors.items():
@@ -179,34 +183,32 @@ for s, col in colors.items():
         lat=d["Y"],
         lon=d["X"],
         mode="markers",
-        marker=dict(size=size_map[s], color=col),
+        marker=dict(
+            size=size_map[s],
+            color=col,
+            opacity=0.85
+        ),
         name=s,
-        text=[
-            f"UAV {i}<br>Status: {st}<br>dmin: {dm:.3f} km"
-            for i, st, dm in zip(d["UAV_ID"], d["Status"], d["dmin"])
-        ],
-        hoverinfo="text"
-    ))
-
-# Prediction vectors
-for _, r in dfB[dfB["PredX"].notna()].iterrows():
-    map_fig.add_trace(go.Scattermapbox(
-        lat=[r["Y"], r["PredY"]],
-        lon=[r["X"], r["PredX"]],
-        mode="lines",
-        line=dict(width=1, color="gray"),
-        showlegend=False
+        hovertemplate=
+        "UAV %{customdata}<br>Status: " + s + "<extra></extra>",
+        customdata=d["UAV_ID"]
     ))
 
 map_fig.update_layout(
     mapbox=dict(
         style="open-street-map",
-        center=dict(lat=dfA["Y"].mean(), lon=dfA["X"].mean()),
-        zoom=11
+        center=dict(
+            lat=dfA["Y"].mean(),
+            lon=dfA["X"].mean()
+        ),
+        zoom=10.5
     ),
-    height=450,
-    margin=dict(l=0, r=0, t=30, b=10),
-    legend=dict(orientation="h")
+    height=420,
+    margin=dict(l=0, r=0, t=20, b=0),
+    legend=dict(
+        orientation="h",
+        y=-0.15
+    )
 )
 
 st.plotly_chart(map_fig, use_container_width=True)
@@ -214,35 +216,31 @@ st.plotly_chart(map_fig, use_container_width=True)
 # =========================================================
 # MAP SUMMARY
 # =========================================================
+# =========================================================
+# MAP SUMMARY (BY STATUS)
+# =========================================================
 st.markdown("### 📌 Map Summary")
 
-c1, c2, c3, c4 = st.columns(4)
+safe_count      = int(sum(dfA["Status"] == "safe"))
+near_count      = int(sum(dfA["Status"].isin(["outer_near", "inner_near"])))
+collision_count = int(sum(dfA["Status"] == "collision"))
+
+c1, c2, c3 = st.columns(3)
+
 with c1:
-    st.metric("Total UAVs", len(dfA))
+    st.metric(" Safe UAVs", safe_count)
+
 with c2:
-    st.metric("Collisions", collision_count)
+    st.metric(" Near UAVs", near_count)
+
 with c3:
-    st.metric("Avg dmin Before (km)", f"{dfB['dmin'].mean():.3f}")
-with c4:
-    st.metric("Avg dmin After (km)", f"{dfA['dmin'].mean():.3f}")
+    st.metric(" Collisions", collision_count)
 
 st.info(
-    "🧠 The map illustrates UAV distribution after cloud-based collision avoidance. "
-    "Prediction vectors represent expected trajectories, while color-coded markers "
-    "indicate safety states. Results confirm improved spatial separation."
+    "This summary shows the number of UAVs classified as safe, near-risk, "
+    "and collision after applying the cloud-based avoidance algorithm."
 )
 
-# =========================================================
-# TABLES
-# =========================================================
-st.subheader("RAW UAV DATA")
-t1, t2 = st.columns(2)
-with t1:
-    st.markdown("**BEFORE**")
-    st.dataframe(dfB, use_container_width=True)
-with t2:
-    st.markdown("**AFTER**")
-    st.dataframe(dfA, use_container_width=True)
 
 # =========================================================
 # AUTO REFRESH
