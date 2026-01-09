@@ -1,4 +1,4 @@
-import time
+اريد import time
 import requests
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ REFRESH_SEC = 2
 st.set_page_config(page_title="UAV Dashboard", layout="wide")
 
 # =========================================================
-# STYLE
+# STYLE (SAFE, NO CUT)
 # =========================================================
 st.markdown("""
 <style>
@@ -62,8 +62,8 @@ def to_df(data):
     for u in data["uavs"]:
         rows.append({
             "UAV_ID": u["uav_id"],
-            "X": u["x"],          # longitude
-            "Y": u["y"],          # latitude
+            "X": u["x"],              # longitude
+            "Y": u["y"],              # latitude
             "Status": u["status"],
             "dmin": u["min_distance_km"],
             "PredX": u["predicted"]["x"] if u.get("predicted") else np.nan,
@@ -77,14 +77,16 @@ dfA = to_df(data_after)
 # =========================================================
 # COLLISION ALERT
 # =========================================================
-collision_count = sum(dfA["Status"] == "collision")
+collision_df = dfA[dfA["Status"] == "collision"]
+collision_count = len(collision_df)
+
 if collision_count > 0:
     st.error(f"🚨 COLLISION ALERT: {collision_count} UAV(s) detected!")
 else:
     st.success("✅ No collisions detected")
 
 # =========================================================
-# MAIN PLOTS
+# ===== TOP ROW : 4 MAIN PLOTS =====
 # =========================================================
 colors = {
     "safe": "blue",
@@ -106,40 +108,46 @@ fig_top = make_subplots(
 # BEFORE
 for s in colors:
     d = dfB[dfB["Status"] == s]
-    fig_top.add_trace(go.Scatter(
-        x=d["X"], y=d["Y"],
-        mode="markers",
-        marker=dict(size=8, color=colors[s], symbol="circle-open"),
-        name=f"BEFORE {s}"
-    ), row=1, col=1)
+    fig_top.add_trace(
+        go.Scatter(
+            x=d["X"], y=d["Y"],
+            mode="markers",
+            marker=dict(size=8, symbol="circle-open", color=colors[s]),
+            name=f"BEFORE {s}"
+        ),
+        row=1, col=1
+    )
 
 # PREDICTION
 valid = dfB["PredX"].notna()
 fig_top.add_trace(go.Scatter(
     x=dfB[valid]["X"], y=dfB[valid]["Y"],
     mode="markers",
-    marker=dict(size=7, color="black"),
+    marker=dict(size=7, symbol="circle-open", color="black"),
     name="Before"
 ), row=1, col=2)
 
 fig_top.add_trace(go.Scatter(
     x=dfB[valid]["PredX"], y=dfB[valid]["PredY"],
     mode="markers",
-    marker=dict(size=8, color="magenta"),
+    marker=dict(size=8, symbol="circle-open", color="magenta"),
     name="Predicted"
 ), row=1, col=2)
 
 # AFTER
 for s in colors:
     d = dfA[dfA["Status"] == s]
-    fig_top.add_trace(go.Scatter(
-        x=d["X"], y=d["Y"],
-        mode="markers",
-        marker=dict(size=8, color=colors[s], symbol="circle-open"),
-        name=f"AFTER {s}"
-    ), row=1, col=3)
+    fig_top.add_trace(
+        go.Scatter(
+            x=d["X"], y=d["Y"],
+            mode="markers",
+            marker=dict(size=8, symbol="circle-open", color=colors[s]),
+            name=f"AFTER {s}"
+        ),
+        row=1, col=3
+    )
 
-# STATUS BAR
+# STATUS DISTRIBUTION
 labels = list(colors.keys())
 fig_top.add_trace(go.Bar(
     x=labels,
@@ -156,73 +164,90 @@ fig_top.add_trace(go.Bar(
 fig_top.update_layout(
     height=360,
     barmode="group",
-    legend=dict(orientation="h", y=-0.3),
-    margin=dict(l=10, r=10, t=40, b=10)
+    margin=dict(l=10, r=10, t=40, b=10),
+    legend=dict(orientation="h", y=-0.28)
 )
 
 st.plotly_chart(fig_top, use_container_width=True)
 
 # =========================================================
-# ANALYSIS PLOTS
+# ===== SECOND ROW : 3 ANALYSIS PLOTS =====
 # =========================================================
-pred_move = np.sqrt((dfB["PredX"] - dfB["X"])**2 + (dfB["PredY"] - dfB["Y"])**2)
-delta_dmin = dfA["dmin"].values - dfB["dmin"].values
+dmin_before = dfB["dmin"].values
+dmin_after  = dfA["dmin"].values
+delta_dmin  = dmin_after - dmin_before
+
+pred_move = np.sqrt(
+    (dfB["PredX"] - dfB["X"])**2 +
+    (dfB["PredY"] - dfB["Y"])**2
+)
+
+# Predicted displacement (Line + Markers)
+fig1 = go.Figure()
+fig1.add_trace(go.Scatter(
+    y=pred_move,
+    mode="lines+markers",
+    line=dict(width=2, color="blue"),
+    marker=dict(size=7, symbol="circle-open")
+))
+fig1.update_layout(
+    title="Predicted Displacement",
+    xaxis_title="UAV Index",
+    yaxis_title="Predicted Displacement (km)",
+    height=260
+)
+
+# Delta dmin
+fig2 = go.Figure()
+fig2.add_trace(go.Bar(y=delta_dmin))
+fig2.update_layout(
+    title="Δ dmin",
+    xaxis_title="UAV Index",
+    yaxis_title="Δ Minimum Distance (km)",
+    height=260
+)
+
+# dmin before vs after
+fig3 = go.Figure()
+fig3.add_trace(go.Scatter(y=dmin_before, mode="lines+markers", name="Before"))
+fig3.add_trace(go.Scatter(y=dmin_after,  mode="lines+markers", name="After"))
+fig3.update_layout(
+    title="dmin Before vs After",
+    xaxis_title="UAV Index",
+    yaxis_title="Minimum Distance (km)",
+    height=260
+)
 
 c1, c2, c3 = st.columns(3)
-
-with c1:
-    st.plotly_chart(go.Figure(
-        go.Scatter(y=pred_move, mode="lines+markers")
-    ).update_layout(title="Predicted Displacement", height=260), use_container_width=True)
-
-with c2:
-    st.plotly_chart(go.Figure(
-        go.Bar(y=delta_dmin)
-    ).update_layout(title="Δ dmin", height=260), use_container_width=True)
-
-with c3:
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(y=dfB["dmin"], mode="lines+markers", name="Before"))
-    fig.add_trace(go.Scatter(y=dfA["dmin"], mode="lines+markers", name="After"))
-    fig.update_layout(title="dmin Before vs After", height=260)
-    st.plotly_chart(fig, use_container_width=True)
+with c1: st.plotly_chart(fig1, use_container_width=True)
+with c2: st.plotly_chart(fig2, use_container_width=True)
+with c3: st.plotly_chart(fig3, use_container_width=True)
 
 # =========================================================
-# BAGHDAD MAP (FIXED)
+# UAV MAP
 # =========================================================
-st.subheader("🗺️ Baghdad Airspace – UAV Positions")
-
-map_df = dfA.dropna(subset=["X", "Y"])
+st.subheader("🗺️ UAV Geographical Map")
 
 map_fig = go.Figure()
 
 for s, col in colors.items():
-    d = map_df[map_df["Status"] == s]
-    if len(d) == 0:
-        continue
-
+    d = dfA[dfA["Status"] == s]
     map_fig.add_trace(go.Scattermapbox(
-        lat=d["Y"].astype(float),
-        lon=d["X"].astype(float),
+        lat=d["Y"],
+        lon=d["X"],
         mode="markers",
-        marker=dict(size=16, color=col, opacity=0.95),
-        text=d["UAV_ID"],
-        hovertemplate=
-            "<b>UAV:</b> %{text}<br>" +
-            "<b>Status:</b> " + s +
-            "<extra></extra>",
+        marker=dict(size=11, color=col),
         name=s
     ))
 
 map_fig.update_layout(
     mapbox=dict(
-        style="carto-positron",
-        center=dict(lat=33.3152, lon=44.3661),  # بغداد
-        zoom=12
+        style="open-street-map",
+        center=dict(lat=dfA["Y"].mean(), lon=dfA["X"].mean()),
+        zoom=11
     ),
-    height=480,
-    margin=dict(l=0, r=0, t=30, b=0),
-    legend=dict(orientation="h", y=0.02)
+    height=420,
+    margin=dict(l=0, r=0, t=30, b=0)
 )
 
 st.plotly_chart(map_fig, use_container_width=True)
@@ -231,13 +256,15 @@ st.plotly_chart(map_fig, use_container_width=True)
 # TABLES
 # =========================================================
 st.subheader("RAW UAV DATA")
-c1, c2 = st.columns(2)
-with c1:
+
+t1, t2 = st.columns(2)
+with t1:
     st.markdown("**BEFORE**")
-    st.dataframe(dfB, use_container_width=True, height=300)
-with c2:
+    st.dataframe(dfB, use_container_width=True, height=320)
+
+with t2:
     st.markdown("**AFTER**")
-    st.dataframe(dfA, use_container_width=True, height=300)
+    st.dataframe(dfA, use_container_width=True, height=320)
 
 # =========================================================
 # AUTO REFRESH
