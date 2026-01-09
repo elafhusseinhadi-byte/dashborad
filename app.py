@@ -226,7 +226,7 @@ with c3: st.plotly_chart(fig3, use_container_width=True)
 # =========================================================
 # UAV MAP
 # =========================================================
-st.subheader("🗺️ UAV Geographical Map")
+st.subheader("🗺️ Baghdad Airspace – UAV Positions")
 
 map_fig = go.Figure()
 
@@ -236,21 +236,34 @@ for s, col in colors.items():
         lat=d["Y"],
         lon=d["X"],
         mode="markers",
-        marker=dict(size=11, color=col),
+        marker=dict(
+            size=10,
+            color=col,
+            symbol="circle"
+        ),
         name=s
     ))
 
 map_fig.update_layout(
     mapbox=dict(
-        style="open-street-map",
-        center=dict(lat=dfA["Y"].mean(), lon=dfA["X"].mean()),
+        style="carto-positron",   
+        center=dict(
+            lat=33.3152,  
+            lon=44.3661
+        ),
         zoom=11
     ),
-    height=420,
-    margin=dict(l=0, r=0, t=30, b=0)
+    height=450,
+    margin=dict(l=0, r=0, t=30, b=0),
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=0.01
+    )
 )
 
 st.plotly_chart(map_fig, use_container_width=True)
+
 
 # =========================================================
 # TABLES
